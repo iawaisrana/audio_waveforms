@@ -136,9 +136,10 @@ class AudioRecorder : PluginRegistry.RequestPermissionsResultListener {
             )
             wavEncoder?.start(result)
         } else {
-            commonEncoder.initCodec(recorderSettings = recorderSettings!!, result = result) {
-                recordingThread?.join()
-            }
+            // Fresh instance per recording so a previous session that is still
+            // tearing down can't clobber this one's state.
+            commonEncoder = CommonEncoder()
+            commonEncoder.initCodec(recorderSettings = recorderSettings!!, result = result)
         }
         val buffer = ByteArray(bufferSize!!)
         recordingThread = Thread {
@@ -179,6 +180,9 @@ class AudioRecorder : PluginRegistry.RequestPermissionsResultListener {
                 sendRecordingResult(result)
                 release()
             } else {
+                // Make sure the last chunk has been queued before EOS is
+                // signalled, so no audio is fed to the codec after EOS.
+                recordingThread?.join()
                 commonEncoder.setOnEncodingCompleted {
                     sendRecordingResult(result)
                     release()
